@@ -25,17 +25,33 @@ class BelgiumFindingAid(Collection):
            try:
              blob = TextBlob(inputs1[1])
              if (inputs1[0]=='German'):
+               try:
+                 inputs_german = blob.translate(to="de")
+                 #inputs_german = unicode( inputs_german, "utf-8" )
+                 self.results_url = "/adsearch?general="+str(inputs_german)
+                 self.result_search_term = str(inputs_german)
+                 #self.result_search_term = self.result_search_term.encode('utf-8')
+               except:
                  inputs_german = blob.translate(to="de")
                  inputs_german = unicode( inputs_german, "utf-8" )
                  self.results_url = "/adsearch?general="+str(inputs_german)
                  self.result_search_term = str(inputs_german)
                  self.result_search_term = self.result_search_term.encode('utf-8')
+
              elif (inputs1[0]=='French') :
+               try:
+                 inputs_french = blob.translate(to="fr")
+                 #inputs_french = unicode( inputs_french, "utf-8" )
+                 self.results_url = "/adsearch?general="+str(inputs_french)
+                 self.result_search_term = str(inputs_french)
+                 #self.result_search_term = self.result_search_term.encode('utf-8')
+               except:
                  inputs_french = blob.translate(to="fr")
                  inputs_french = unicode( inputs_french, "utf-8" )
                  self.results_url = "/adsearch?general="+str(inputs_french)
                  self.result_search_term = str(inputs_french)
                  self.result_search_term = self.result_search_term.encode('utf-8')
+
              else:
                  inputs = " "+inputs
                  inputs = inputs.split(' ',1)

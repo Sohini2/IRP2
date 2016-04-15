@@ -103,6 +103,7 @@ archivesList = [
         ]
     },
 
+
     {
         'name': 'State Archives in the Netherlands',
         'logo': 'logo-dhm.png',
@@ -116,6 +117,8 @@ archivesList = [
         ]
     },
 ]
+
+
 archivesList.sort(key=lambda inst: inst['name'])
 
 
