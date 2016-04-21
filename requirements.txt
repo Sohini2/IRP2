@@ -1,0 +1,7 @@
+lxml
+flask
+requests
+beautifulsoup4
+TextBlob
+Werkzeug
+PyYAML
