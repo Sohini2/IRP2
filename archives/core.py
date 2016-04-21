@@ -1,22 +1,26 @@
-from dummy import Dummy
-from belgium import BelgiumFindingAid
-from fold3 import Fold3
-from gettyas import GettyAS
-from gettyri import GettyRI
-from nara import NARACatalog
-from ushmm import USHMM
-from austria import AustriaFindingAid
-from uk import UKFindingAid
-from berlin import BerlinFindingAid
-from netherlands import NetherlandsFindingAid
+from archives.dummy import Dummy
+from archives.belgium import BelgiumFindingAid
+from archives.fold3 import Fold3
+from archives.gettyas import GettyAS
+from archives.gettyri import GettyRI
+from archives.nara import NARACatalog
+from archives.ushmm import USHMM
+from archives.austria import AustriaFindingAid
+from archives.uk import UKFindingAid
+from archives.netherlands import NetherlandsFindingAid
+from archives.lost_art import LostArt
 import sys
+import json
 import logging
+from textblob import TextBlob
+from textblob.translate import NotTranslated
 
 archivesList = [
-     {
+    {
         'name': 'State Archives in Belgium',
         'logo': 'logo-state-archives-belgium.png',
-        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/belgium.html',
+        'info_url': "http://www.archives.gov/research/holocaust/international-resources/"
+                    "belgium.html",
         'collections': [
             {
                 'name': 'Holocaust Assets Finding Aid',
@@ -63,11 +67,11 @@ archivesList = [
             Fold3.info
         ]
     },
-
     {
         'name': 'State Archives in Austria',
         'logo': 'austria.png',
-        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/austria.html',
+        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/'
+                    'austria.html',
         'collections': [
             {
                 'name': 'Art Database of the National Fund',
@@ -76,7 +80,6 @@ archivesList = [
             },
         ]
     },
-
     {
         'name': 'National Archives of the UK',
         'logo': 'austria.png',
@@ -91,23 +94,23 @@ archivesList = [
     },
 
     {
-        'name': 'Koordinierungsstelle Magdeburg',
+        'name': 'Federal Archives of Germany',
         'logo': 'logo-bundesarchiv.png',
-        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/berlin.html',
+        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/'
+                    'bundesarchiv.html',
         'collections': [
             {
-                'name': 'Lost Art Internet Database',
-                'class': BerlinFindingAid.__name__,
+                'name': 'Lost Art Database (Magdeburg)',
+                'class': LostArt.__name__,
                 'lang': 'en'
             },
         ]
     },
-
-
     {
         'name': 'State Archives in the Netherlands',
         'logo': 'logo-dhm.png',
-        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/netherlands.html',
+        'info_url': 'http://www.archives.gov/research/holocaust/international-resources/'
+                    'netherlands.html',
         'collections': [
             {
                 'name': 'Archives and Collections',
@@ -122,63 +125,52 @@ archivesList = [
 archivesList.sort(key=lambda inst: inst['name'])
 
 
+def get_translations(keywords, languages):
+    result = []
+    if len(languages) > 0:
+        blob = TextBlob(keywords)
+        for lang in languages:
+            try:
+                result.append(str(blob.translate(to=lang)))
+            except NotTranslated:
+                pass
+    return result
+
+
 # asyncSearch - Set to False for serial searches and better error reporting
 # dummySearch - Set to True for offline development work w/o searches
-def searchAll(rawinputs, asyncSearch=False, dummySearch=False):
+def searchAll(**kwargs):
     """Search all known collections for the given input dictionary."""
+    logging.debug('searchAll called:\n{0}'.format(json.dumps(kwargs)))
+    dummySearch = False
     from multiprocessing.pool import ThreadPool
-    pool = ThreadPool(processes=8)
+    pool = ThreadPool(processes=10)
     async_handles = []
-    results = {}
+    terms = kwargs.get('translated_terms', '')
+    results = {'collections': {}, 'translated_terms': terms}
     for inst in archivesList:
         for coll in inst['collections']:
             classname = coll['class']
-
             module = sys.modules[__name__]
             collClass = getattr(module, classname)
             collObject = collClass()
 
-            if dummySearch: # use dummy collection that does no search..
+            if dummySearch:  # use dummy collection that does no search..
                 collObject = Dummy()
                 collObject.setClassName(classname)
 
-            # NOTE: presence of info.fields indicates advanced search support
-            if hasattr(collObject, 'info'):
-                if 'fields' in collObject.info:
-                    inputs = rawinputs
-                else:
-                    inputs = ''
-                    for key in rawinputs:
-                        if(len(rawinputs[key].strip()) > 0):
-                            if( len(inputs) > 0 ):
-                                inputs += ' '+rawinputs[key]
-                            else:
-                                inputs += rawinputs[key]
-            else:
-                inputs = ''
-                for key in rawinputs:
-                    if(len(rawinputs[key].strip()) > 0):
-                        if( len(inputs) > 0 ):
-                            inputs += ' '+rawinputs[key]
-                        else:
-                            inputs += rawinputs[key]
+            handle = pool.apply_async(collObject.keywordResultsCount, (), kwargs)
+            async_handles.append(handle)
 
-            if asyncSearch:
-                handle = pool.apply_async(collObject.keywordResultsCount, (inputs,))
-                async_handles.append(handle)
-            else:
-                resultcoll = collObject.keywordResultsCount(inputs)
-                result_dict = resultcoll.emit()
-                results[result_dict['class']] = result_dict
-    if asyncSearch:
-        for res in async_handles:
-            try:
-                resultcoll = res.get(timeout=15)
-            except Exception, e:
-                logging.exception(e)
-                resultcoll = None
-                pass
-            if resultcoll != None:
-                result_dict = resultcoll.emit()
-                results[result_dict['class']] = result_dict
+    # NOTE: Maintain indent level, do not put this inside above FOR loop
+    for res in async_handles:
+        try:
+            resultcoll = res.get(timeout=15)
+        except Exception as e:
+            logging.exception(e)
+            resultcoll = None
+            pass
+        if resultcoll is not None:
+            result_dict = resultcoll.emit()
+            results['collections'][result_dict['class']] = result_dict
     return results
