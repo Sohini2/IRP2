@@ -100,10 +100,10 @@ def login():
             flash('This Email is already a user')
             return redirect(url_for('showLogin'))
         else:
-            _password = generate_password_hash(_password)
+            _pwhash = generate_password_hash(_password)
             db.execute("""INSERT INTO user_profile(username, password, email_id, registered_on)
                            values(?, ?, ?, date('now'));""",
-                       [_name, _password, _email])
+                       [_name, _pwhash, _email])
             db.commit()
             flash('User created successfully !')
             return redirect(url_for('showLogin'))
@@ -114,18 +114,20 @@ def login():
 @app.route('/tologin', methods=['POST'])
 def tologin():
     db = get_db()
-    _uname = request.form['username']
+    _uname = request.form['username'].strip()
     _password = request.form['password']
-    _hashedpw = generate_password_hash(_password)
     cur = db.execute("""
         SELECT username, password, email_id, registered_on FROM user_profile
         WHERE ( username = ? OR email_id = ? )
         LIMIT 1;""", [_uname, _uname])
     row = cur.fetchone()
     if row is None:
+        logging.debug("No matching row for login")
         return json.dumps({'html': '<span>Incorrect credentials. PLease try again.. </span>'})
-    if _uname == row['username'] and check_password_hash(row['password'], _password):
+    logging.debug("Got a matching row for login:\n"+str(row))
+    if check_password_hash(row['password'], _password):
         session['_uname'] = _uname
+        flash("Login Succeeded. Welcome {0}.".format(row['username']))
         return redirect(url_for('profile'))
     else:
         return json.dumps({'html': '<span>Incorrect credentials. PLease try again.. </span>'})
@@ -135,7 +137,7 @@ def tologin():
 def profile():
     if '_uname' not in session:
         return redirect(url_for('showLogin'))
-    return render_template('layout.html')
+    return render_template('profile.html')
 
 
 @app.route('/logout')
@@ -192,8 +194,8 @@ def saveSearch():
                    values(?, date('now'), ?);""",
                [_uname, json.dumps(inputs)])
     db.commit()
-    flash('Search saved  successfully !')
-    return render_template("searchsaved.html")
+    flash('Your search has been saved.')
+    return redirect(url_for('render_index_page'))
 
 
 @app.route('/adsearch', methods=['GET', 'POST'])
